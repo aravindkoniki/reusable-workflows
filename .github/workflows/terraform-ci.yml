@@ -1,0 +1,88 @@
+# .github/workflows/terraform-module-ci.yml
+
+name: Terraform Module CI Workflow
+
+on:
+  workflow_call:
+    inputs:
+      terraform_version:
+        required: true
+        type: string
+      terraform_working_dir:
+        required: true
+        type: string
+      terraform_development_type:
+        required: true
+        type: string
+
+jobs:
+  # Stage 1: Terraform Formatting
+  format:
+    name: Terraform Format
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: ${{ inputs.terraform_version }}
+
+      - name: Run terraform fmt
+        run: |
+          cd ${{ inputs.terraform_working_dir }}
+          terraform fmt -list=true -write=true -diff=true -check=true
+
+  # Stage 2: Code Coverage - Static Analysis & Linting
+  code_coverage:
+    name: Code Coverage (Static Analysis & Linting)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Static Analysis (Checkov)
+        run: |
+          pip install checkov
+          cd ${{ inputs.terraform_working_dir }}
+          checkov -d .
+
+      - name: Linting (TFLint)
+        uses: terraform-linters/setup-tflint@v1
+        with:
+          tflint_version: latest
+
+      - name: Run TFLint
+        run: |
+          cd ${{ inputs.terraform_working_dir }}
+          tflint --config .tflint.hcl
+
+  # Stage 3: Tests (Unit + Integration)
+  test:
+    runs-on: ubuntu-latest
+    needs: code_coverage
+    strategy:
+      matrix:
+        test_type: ["unit", "integration"]
+        # Conditional matrix based on branch name prefix
+    steps:
+      - name: Checkout the repository
+        uses: actions/checkout@v3
+
+      # Only run unit tests if the branch name starts with "fix/"
+      - name: Unit Tests
+        if: startsWith(github.ref, 'refs/heads/fix/')
+        run: |
+          echo "Running Unit Tests"
+
+      # Only run unit tests and integration tests if the branch name starts with "feature/"
+      - name: Unit Tests
+        if: startsWith(github.ref, 'refs/heads/feature/')
+        run: |
+          echo "Running Unit Tests"
+
+      - name: Integration Tests
+        if: startsWith(github.ref, 'refs/heads/feature/') || ((startsWith(github.ref, 'refs/heads/fix/') &&  ${{ inputs.terraform_development_type == 'module'}}))
+        run: |
+          echo "Running Integration Tests"

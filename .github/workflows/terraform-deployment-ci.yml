@@ -1,0 +1,106 @@
+# .github/workflows/terraform-deployment-ci.yml
+
+name: Terraform Deployment CI Workflow
+
+on:
+  workflow_call:
+    inputs:
+      terraform_version:
+        required: true
+        type: string
+      terraform_working_dir:
+        required: true
+        type: string
+      terraform_development_type:
+        required: true
+        type: string
+    
+jobs:
+      # Stage 1: Terraform Formatting (Reusable from Module CI)
+      format:
+        uses: ./.github/workflows/terraform-module-ci.yml
+        with:
+          terraform_version: ${{ inputs.terraform_version }}
+          terraform_working_dir: ${{ inputs.terraform_working_dir }}
+          terraform_development_type: ${{ inputs.terraform_development_type }}
+    
+      # Stage 2: Code Coverage (Reusable from Module CI)
+      code_coverage:
+        uses: ./.github/workflows/terraform-module-ci.yml
+        with:
+          terraform_version: ${{ inputs.terraform_version }}
+          terraform_working_dir: ${{ inputs.terraform_working_dir }}
+          terraform_development_type: ${{ inputs.terraform_development_type }}
+    
+      # Stage 3: Unit and Integration Tests (Reusable from Module CI)
+      test:
+        uses: ./.github/workflows/terraform-module-ci.yml
+        with:
+          terraform_version: ${{ inputs.terraform_version }}
+          terraform_working_dir: ${{ inputs.terraform_working_dir }}
+          terraform_development_type: ${{ inputs.terraform_development_type }}
+    
+      # Stage 4: PreDeployment Plan
+      pre_deployment_plan:
+        name: PreDeployment Plan
+        runs-on: ubuntu-latest
+        steps:
+          - name: Checkout code
+            uses: actions/checkout@v3
+    
+          - name: Install Terraform
+            uses: hashicorp/setup-terraform@v2
+            with:
+              terraform_version: ${{ inputs.terraform_version }}
+    
+          - name: Terraform Plan
+            run: |
+              cd ${{ inputs.terraform_working_dir }}
+              terraform init
+              terraform plan
+    
+          - name: Terraform Show
+            run: |
+              cd ${{ inputs.terraform_working_dir }}
+              terraform show
+    
+      # Stage 5: Plan (Only on master/main branch)
+      plan:
+        name: Plan
+        runs-on: ubuntu-latest
+        if: github.ref == 'refs/heads/main'
+        steps:
+          - name: Checkout code
+            uses: actions/checkout@v3
+    
+          - name: Install Terraform
+            uses: hashicorp/setup-terraform@v2
+            with:
+              terraform_version: ${{ inputs.terraform_version }}
+    
+          - name: Terraform Plan
+            run: |
+              cd ${{ inputs.terraform_working_dir }}
+              terraform init
+              terraform plan
+    
+      # Stage 6: Deploy (Only on master/main branch)
+      deploy:
+        name: Deploy
+        runs-on: ubuntu-latest
+        if: github.ref == 'refs/heads/main'
+        needs: plan  # This ensures the plan was successful
+        steps:
+          - name: Checkout code
+            uses: actions/checkout@v3
+    
+          - name: Install Terraform
+            uses: hashicorp/setup-terraform@v2
+            with:
+              terraform_version: ${{ inputs.terraform_version }}
+    
+          - name: Terraform Apply
+            run: |
+              cd ${{ inputs.terraform_working_dir }}
+              terraform apply -auto-approve
+    
