@@ -1,0 +1,39 @@
+name: Reusable Workflow with OIDC Authentication to AWS
+
+on:
+  workflow_call:
+    inputs:
+      env_name:
+        description: "The environment name"
+        required: true
+        type: string
+      iam_role_arn:
+        description: "IAM Role ARN"
+        required: true
+        type: string
+      aws_region:
+        description: "Region of deployment"
+        required: true
+        type: string
+    
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write  # Required for OIDC authentication
+      contents: read   # Allows access to the repository contents
+
+    steps:
+      - name: Checkout the code
+        uses: actions/checkout@v3
+
+      - name: Configure AWS credentials using OIDC
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: ${{ inputs.env_name }}  # IAM role ARN
+          aws-region: ${{ inputs.aws_region }}  # desired region
+
+      - name: Verify AWS identity
+        run: aws sts get-caller-identity
